@@ -52,7 +52,7 @@ func main() {
 }
 
 func tryClient(ctx context.Context, c *sql.DB) error {
-	rows, err := c.Query("SELECT version() as v;")
+	rows, err := c.Query(os.Getenv("PSQL_QUERY"))
 	if err != nil {
 		return err
 	}
@@ -65,9 +65,9 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 		}
 	}
 	if v == "" {
-		return fmt.Errorf("failed to query version: seemingly empty %q", v)
+		return fmt.Errorf("failed to query: seemingly empty %q", v)
 	}
-	log.Printf("SELECT version() = %q", v)
+	log.Printf("%q = %q", os.Getenv("PSQL_QUERY"), v)
 
 	return rows.Err()
 }
