@@ -14,6 +14,35 @@ import (
 	_ "github.com/lib/pq"
 )
 
+var (
+	QueryInterval = func() time.Duration {
+		intervalS := os.Getenv("QUERY_INTERVAL")
+		if intervalS == "" {
+			return time.Second * 3
+		}
+		d, err := time.ParseDuration(intervalS)
+		if err != nil {
+			panic(err)
+		}
+		return d
+	}()
+	TransactionDuration = func() time.Duration {
+		durationS := os.Getenv("TRANSACTION_DURATION")
+		if durationS == "" {
+			return 0
+		}
+		d, err := time.ParseDuration(durationS)
+		if err != nil {
+			panic(err)
+		}
+		return d
+	}()
+	PSQLConnString = os.Getenv("PSQL_CONN_STRING")
+	PSQLQuery      = os.Getenv("PSQL_QUERY")
+	FreshClient    = os.Getenv("FRESH_CLIENT") != "false"
+	StickyClient   = os.Getenv("STICKY_CLIENT") != "false"
+)
+
 func main() {
 	ctx, can := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer can()
@@ -25,53 +54,48 @@ func main() {
 		}
 	}()
 
-	interval := time.Second * 3
-	if intervalS := os.Getenv("PSQL_QUERY_INTERVAL"); intervalS != "" {
-		d, err := time.ParseDuration(intervalS)
-		if err != nil {
-			panic(err)
-		}
-		interval = d
-	}
-
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(QueryInterval)
 	defer ticker.Stop()
 
-	stickyClient, err := sql.Open("postgres", os.Getenv("PSQL_CONN_STRING"))
+	stickyClient, err := sql.Open("postgres", PSQLConnString)
 	if err != nil {
 		panic(err)
 	}
 	defer stickyClient.Close()
 
 	for {
-		if err := func() error {
-			c, err := sql.Open("postgres", os.Getenv("PSQL_CONN_STRING"))
-			if err != nil {
-				return err
-			}
-			defer c.Close()
+		if FreshClient {
+			if err := func() error {
+				c, err := sql.Open("postgres", PSQLConnString)
+				if err != nil {
+					return err
+				}
+				defer c.Close()
 
-			if _, err := tryClient(ctx, c, "SELECT version();"); err != nil {
-				return fmt.Errorf("failed ezpz query: %w", err)
-			}
+				if _, err := tryClient(ctx, c, "SELECT version();"); err != nil {
+					return fmt.Errorf("failed ezpz query: %w", err)
+				}
 
-			if v, err := tryClient(ctx, c, os.Getenv("PSQL_QUERY")); err != nil {
-				return err
-			} else {
-				log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
-			}
+				if v, err := tryClient(ctx, c, PSQLQuery); err != nil {
+					return err
+				} else {
+					log.Printf("%q = %v", PSQLQuery, v)
+				}
 
-			return nil
-		}(); err != nil {
-			log.Printf("failed to use a new client: %v", err)
+				return nil
+			}(); err != nil {
+				log.Printf("failed to use a new client: %v", err)
+			}
 		}
 
-		if _, err := tryClient(ctx, stickyClient, "SELECT version();"); err != nil {
-			log.Printf("failed ezpz query with a sticky client: %v", err)
-		} else if v, err := tryClient(ctx, stickyClient, os.Getenv("PSQL_QUERY")); err != nil {
-			log.Printf("failed to use a sticky client: %v", err)
-		} else {
-			log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
+		if StickyClient {
+			if _, err := tryClient(ctx, stickyClient, "SELECT version();"); err != nil {
+				log.Printf("failed ezpz query with a sticky client: %v", err)
+			} else if v, err := tryClient(ctx, stickyClient, PSQLQuery); err != nil {
+				log.Printf("failed to use a sticky client: %v", err)
+			} else {
+				log.Printf("%q = %v", PSQLQuery, v)
+			}
 		}
 
 		select {
