@@ -90,6 +90,11 @@ func tryClient(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
 	}
 	defer tx.Rollback()
 
+	var version string
+	if err := tx.QueryRowContext(ctx, "SELECT version();").Scan(&version); err != nil {
+		return nil, fmt.Errorf("failed ezpz query: %w", err)
+	}
+
 	var v interface{}
 	if err := tx.QueryRowContext(ctx, q).Scan(&v); err != nil {
 		return nil, fmt.Errorf("failed to query row context(%q): %w", q, err)
