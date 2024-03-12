@@ -70,22 +70,21 @@ func main() {
 }
 
 func tryClient(ctx context.Context, c *sql.DB) error {
-	rows, err := c.Query(os.Getenv("PSQL_QUERY"))
+	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer tx.Rollback()
 
-	var v string
-	for rows.Next() {
-		if err := rows.Scan(&v); err != nil {
-			return err
-		}
+	var v interface{}
+	if err := tx.QueryRowContext(ctx, os.Getenv("PSQL_QUERY")).Scan(&v); err != nil {
+		return fmt.Errorf("failed to query row context(%q): %w", os.Getenv("PSQL_QUERY"), err)
 	}
-	if v == "" {
-		return fmt.Errorf("failed to query: seemingly empty %q", v)
-	}
-	log.Printf("%q = %q", os.Getenv("PSQL_QUERY"), v)
 
-	return rows.Err()
+	if v == nil {
+		return fmt.Errorf("no value scanned (%q)", os.Getenv("PSQL_QUERY"))
+	}
+
+	log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
+	return tx.Commit()
 }
