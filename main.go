@@ -25,7 +25,16 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(time.Second * 3)
+	interval := time.Second * 3
+	if intervalS := os.Getenv("PSQL_QUERY_INTERVAL"); intervalS != "" {
+		d, err := time.ParseDuration(intervalS)
+		if err != nil {
+			panic(err)
+		}
+		interval = d
+	}
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	stickyClient, err := sql.Open("postgres", os.Getenv("PSQL_CONN_STRING"))
@@ -35,12 +44,6 @@ func main() {
 	defer stickyClient.Close()
 
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-
 		if err := func() error {
 			c, err := sql.Open("postgres", os.Getenv("PSQL_CONN_STRING"))
 			if err != nil {
@@ -56,6 +59,13 @@ func main() {
 		if err := tryClient(ctx, stickyClient); err != nil {
 			log.Printf("failed to use a sticky client: %v", err)
 		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
 	}
 }
 
