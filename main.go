@@ -61,7 +61,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer stickyClient.Close()
+	defer func() {
+		if err := stickyClient.Close(); err != nil {
+			log.Printf("failed to close sticky client: %v", err)
+		}
+	}()
 
 	for {
 		if FreshClient {
@@ -70,7 +74,11 @@ func main() {
 				if err != nil {
 					return err
 				}
-				defer c.Close()
+				defer func() {
+					if err := c.Close(); err != nil {
+						log.Printf("failed to close fresh client: %v", err)
+					}
+				}()
 
 				if _, err := tryClient(ctx, c, "SELECT version();"); err != nil {
 					return fmt.Errorf("failed ezpz query: %w", err)
