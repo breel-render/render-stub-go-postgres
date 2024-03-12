@@ -80,29 +80,15 @@ func main() {
 					}
 				}()
 
-				if _, err := tryClient(ctx, c, "SELECT version();"); err != nil {
-					return fmt.Errorf("failed ezpz query: %w", err)
-				}
-
-				if v, err := tryClient(ctx, c, PSQLQuery); err != nil {
-					return err
-				} else {
-					log.Printf("%q = %v", PSQLQuery, v)
-				}
-
-				return nil
+				return tryClient(ctx, c)
 			}(); err != nil {
 				log.Printf("failed to use a new client: %v", err)
 			}
 		}
 
 		if StickyClient {
-			if _, err := tryClient(ctx, stickyClient, "SELECT version();"); err != nil {
-				log.Printf("failed ezpz query with a sticky client: %v", err)
-			} else if v, err := tryClient(ctx, stickyClient, PSQLQuery); err != nil {
+			if err := tryClient(ctx, stickyClient); err != nil {
 				log.Printf("failed to use a sticky client: %v", err)
-			} else {
-				log.Printf("%q = %v", PSQLQuery, v)
 			}
 		}
 
@@ -115,7 +101,26 @@ func main() {
 	}
 }
 
-func tryClient(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
+func tryClient(ctx context.Context, c *sql.DB) error {
+	if _, err := tryQuery(ctx, c, "SELECT version();"); err != nil {
+		return fmt.Errorf("failed to use client at all: %w", err)
+	}
+
+	result, err := tryQuery(ctx, c, PSQLQuery)
+
+	if _, err := tryQuery(ctx, c, "SELECT version();"); err != nil {
+		return fmt.Errorf("failed to use client again: %w", err)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to use client (%s): %w", PSQLQuery, err)
+	}
+
+	log.Printf("%q = %v", PSQLQuery, result)
+	return nil
+}
+
+func tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
 	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
