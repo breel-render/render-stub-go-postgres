@@ -90,23 +90,53 @@ func tryClient(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
 	}
 	defer tx.Rollback()
 
-	var version string
-	if err := tx.QueryRowContext(ctx, "SELECT version();").Scan(&version); err != nil {
-		return nil, fmt.Errorf("failed ezpz query: %w", err)
-	}
+	result := make(chan interface{})
+	errc := make(chan error)
 
-	var v interface{}
-	if err := tx.QueryRowContext(ctx, q).Scan(&v); err != nil {
-		return nil, fmt.Errorf("failed to query row context(%q): %w", q, err)
-	}
+	go func() {
+		defer close(result)
+		defer close(errc)
 
-	if v == nil {
-		return nil, fmt.Errorf("no value scanned (%q)", q)
-	}
+		v, err := func() (interface{}, error) {
+			var version string
+			if err := tx.QueryRowContext(ctx, "SELECT version();").Scan(&version); err != nil {
+				return nil, fmt.Errorf("failed ezpz query: %w", err)
+			}
 
-	if err := tx.Commit(); err != nil {
+			var v interface{}
+			if err := tx.QueryRowContext(ctx, q).Scan(&v); err != nil {
+				return nil, fmt.Errorf("failed to query row context(%q): %w", q, err)
+			}
+
+			if v == nil {
+				return nil, fmt.Errorf("no value scanned (%q)", q)
+			}
+
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+
+			return v, nil
+		}()
+		if err != nil {
+			select {
+			case errc <- err:
+			case <-ctx.Done():
+			}
+		} else {
+			select {
+			case result <- v:
+			case <-ctx.Done():
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case err := <-errc:
 		return nil, err
+	case v := <-result:
+		return v, nil
 	}
-
-	return v, nil
 }
