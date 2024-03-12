@@ -51,13 +51,27 @@ func main() {
 			}
 			defer c.Close()
 
-			return tryClient(ctx, c)
+			if _, err := tryClient(ctx, c, "SELECT version();"); err != nil {
+				return fmt.Errorf("failed ezpz query: %w", err)
+			}
+
+			if v, err := tryClient(ctx, c, os.Getenv("PSQL_QUERY")); err != nil {
+				return err
+			} else {
+				log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
+			}
+
+			return nil
 		}(); err != nil {
 			log.Printf("failed to use a new client: %v", err)
 		}
 
-		if err := tryClient(ctx, stickyClient); err != nil {
+		if _, err := tryClient(ctx, stickyClient, "SELECT version();"); err != nil {
+			log.Printf("failed ezpz query with a sticky client: %v", err)
+		} else if v, err := tryClient(ctx, stickyClient, os.Getenv("PSQL_QUERY")); err != nil {
 			log.Printf("failed to use a sticky client: %v", err)
+		} else {
+			log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
 		}
 
 		select {
@@ -69,22 +83,25 @@ func main() {
 	}
 }
 
-func tryClient(ctx context.Context, c *sql.DB) error {
+func tryClient(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
 	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	var v interface{}
-	if err := tx.QueryRowContext(ctx, os.Getenv("PSQL_QUERY")).Scan(&v); err != nil {
-		return fmt.Errorf("failed to query row context(%q): %w", os.Getenv("PSQL_QUERY"), err)
+	if err := tx.QueryRowContext(ctx, q).Scan(&v); err != nil {
+		return nil, fmt.Errorf("failed to query row context(%q): %w", q, err)
 	}
 
 	if v == nil {
-		return fmt.Errorf("no value scanned (%q)", os.Getenv("PSQL_QUERY"))
+		return nil, fmt.Errorf("no value scanned (%q)", q)
 	}
 
-	log.Printf("%q = %v", os.Getenv("PSQL_QUERY"), v)
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return v, nil
 }
