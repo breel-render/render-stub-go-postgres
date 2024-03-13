@@ -112,13 +112,13 @@ func main() {
 }
 
 func tryClient(ctx context.Context, c *sql.DB) error {
-	if _, err := tryQuery(ctx, c, "SELECT version();"); err != nil {
+	if _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
 		return fmt.Errorf("failed to use client at all: %w", err)
 	}
 
-	result, err := tryQuery(ctx, c, PSQLQuery)
+	result, err := tryQuery(ctx, c, PSQLQuery, TransactionDuration)
 
-	if _, err := tryQuery(ctx, c, "SELECT version();"); err != nil {
+	if _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
 		return fmt.Errorf("failed to use client again: %w", err)
 	}
 
@@ -130,7 +130,7 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 	return nil
 }
 
-func tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
+func tryQuery(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, error) {
 	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(TransactionDuration):
+	case <-time.After(sleep):
 	}
 
 	var v interface{}
