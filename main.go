@@ -15,37 +15,47 @@ import (
 )
 
 var (
-	QueryInterval = func() time.Duration {
-		intervalS := os.Getenv("QUERY_INTERVAL")
-		if intervalS == "" {
-			return time.Second * 3
-		}
-		d, err := time.ParseDuration(intervalS)
-		if err != nil {
-			panic(err)
-		}
-		return d
-	}()
-	TransactionDuration = func() time.Duration {
-		durationS := os.Getenv("TRANSACTION_DURATION")
-		if durationS == "" {
-			return 0
-		}
-		d, err := time.ParseDuration(durationS)
-		if err != nil {
-			panic(err)
-		}
-		return d
-	}()
-	PSQLConnString = os.Getenv("PSQL_CONN_STRING")
-	PSQLQuery      = os.Getenv("PSQL_QUERY")
-	FreshClient    = os.Getenv("FRESH_CLIENT") != "false"
-	StickyClient   = os.Getenv("STICKY_CLIENT") != "false"
+	QueryInterval       = mustParseDuration(envOr("QUERY_INTERVAL", "3s"))
+	TransactionDuration = mustParseDuration(envOr("TRANSACTION_DURATION", "0"))
+	PingPongInterval    = mustParseDuration(envOr("PING_PONG_INTERVAL", "0"))
+	PSQLConnString      = os.Getenv("PSQL_CONN_STRING")
+	PSQLQuery           = os.Getenv("PSQL_QUERY")
+	FreshClient         = os.Getenv("FRESH_CLIENT") != "false"
+	StickyClient        = os.Getenv("STICKY_CLIENT") != "false"
 )
+
+func mustParseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+func envOr(k, v string) string {
+	v2 := os.Getenv(k)
+	if v2 == "" {
+		return v
+	}
+	return v2
+}
 
 func main() {
 	ctx, can := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer can()
+
+	if PingPongInterval > 0 {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(PingPongInterval):
+					log.Println("ping")
+				}
+			}
+		}()
+	}
 
 	go func() {
 		for ctx.Err() == nil {
