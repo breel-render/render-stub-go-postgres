@@ -22,6 +22,7 @@ var (
 	PSQLQuery           = os.Getenv("PSQL_QUERY")
 	FreshClient         = os.Getenv("FRESH_CLIENT") != "false"
 	StickyClient        = os.Getenv("STICKY_CLIENT") != "false"
+	NoClose             = os.Getenv("NO_CLOSE") == "true"
 )
 
 func mustParseDuration(s string) time.Duration {
@@ -72,6 +73,9 @@ func main() {
 		panic(err)
 	}
 	defer func() {
+		if NoClose {
+			return
+		}
 		if err := stickyClient.Close(); err != nil {
 			log.Printf("failed to close sticky client: %v", err)
 		}
@@ -85,6 +89,9 @@ func main() {
 					return err
 				}
 				defer func() {
+					if NoClose {
+						return
+					}
 					if err := c.Close(); err != nil {
 						log.Printf("failed to close fresh client: %v", err)
 					}
