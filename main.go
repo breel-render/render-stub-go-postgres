@@ -68,18 +68,22 @@ func main() {
 	ticker := time.NewTicker(QueryInterval)
 	defer ticker.Stop()
 
-	stickyClient, err := sql.Open("postgres", PSQLConnString)
-	if err != nil {
-		panic(err)
+	var stickyClient *sql.DB
+	var err error
+	if StickyClient {
+		stickyClient, err = sql.Open("postgres", PSQLConnString)
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if NoClose {
+				return
+			}
+			if err := stickyClient.Close(); err != nil {
+				log.Printf("failed to close sticky client: %v", err)
+			}
+		}()
 	}
-	defer func() {
-		if NoClose {
-			return
-		}
-		if err := stickyClient.Close(); err != nil {
-			log.Printf("failed to close sticky client: %v", err)
-		}
-	}()
 
 	for {
 		if FreshClient {
@@ -103,7 +107,7 @@ func main() {
 			}
 		}
 
-		if StickyClient {
+		if stickyClient != nil {
 			if err := tryClient(ctx, stickyClient); err != nil {
 				log.Printf("failed to use a sticky client: %v", err)
 			}
