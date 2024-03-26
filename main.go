@@ -15,14 +15,14 @@ import (
 )
 
 var (
+	PSQLConnString      = os.Getenv("PSQL_CONN_STRING")
 	QueryInterval       = mustParseDuration(envOr("QUERY_INTERVAL", "3s"))
 	TransactionDuration = mustParseDuration(envOr("TRANSACTION_DURATION", "0"))
 	PingPongInterval    = mustParseDuration(envOr("PING_PONG_INTERVAL", "0"))
-	PSQLConnString      = os.Getenv("PSQL_CONN_STRING")
-	PSQLQuery           = os.Getenv("PSQL_QUERY")
-	FreshClient         = os.Getenv("FRESH_CLIENT") != "false"
-	StickyClient        = os.Getenv("STICKY_CLIENT") != "false"
-	NoClose             = os.Getenv("NO_CLOSE") == "true"
+	PSQLQuery           = envOr("PSQL_QUERY", "SELECT version();")
+	FreshClient         = envOr("FRESH_CLIENT", "true") != "false"
+	StickyClient        = envOr("STICKY_CLIENT", "false") != "false"
+	NoClose             = envOr("NO_CLOSE", "true") == "true"
 )
 
 func mustParseDuration(s string) time.Duration {
