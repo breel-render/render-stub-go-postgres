@@ -142,6 +142,13 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 }
 
 func tryQuery(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, error) {
+	if sleep > 0 {
+		return tryQueryAsTX(ctx, c, q, sleep)
+	}
+	return _tryQuery(ctx, c, q)
+}
+
+func tryQueryAsTX(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, error) {
 	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -167,4 +174,24 @@ func tryQuery(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (in
 	}
 
 	return v, tx.Commit()
+}
+
+func _tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
+	var version string
+	row := c.QueryRowContext(ctx, "SELECT version();")
+	if err := row.Scan(&version); err != nil {
+		return nil, fmt.Errorf("failed ezpz query: %w", err)
+	}
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed ezpz query: %w", err)
+	}
+
+	var v interface{}
+	row = c.QueryRowContext(ctx, q)
+	if err := row.Scan(&v); err != nil {
+		return nil, fmt.Errorf("failed to scan row context(%q): %w", q, err)
+	} else if v == nil {
+		return nil, fmt.Errorf("no value scanned (%q)", q)
+	}
+	return v, row.Err()
 }
