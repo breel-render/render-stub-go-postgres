@@ -137,7 +137,7 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 		return fmt.Errorf("failed to use client (%s): %w", PSQLQuery, err)
 	}
 
-	log.Printf("(%v) %q = %v", duration, PSQLQuery, result)
+	log.Printf("(%fms) %q = %v", float64(duration)/float64(time.Millisecond), PSQLQuery, result)
 	return nil
 }
 
