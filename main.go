@@ -123,13 +123,13 @@ func main() {
 }
 
 func tryClient(ctx context.Context, c *sql.DB) error {
-	if _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
+	if _, _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
 		return fmt.Errorf("failed to use client at all: %w", err)
 	}
 
-	result, err := tryQuery(ctx, c, PSQLQuery, TransactionDuration)
+	result, duration, err := tryQuery(ctx, c, PSQLQuery, TransactionDuration)
 
-	if _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
+	if _, _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
 		return fmt.Errorf("failed to use client again: %w", err)
 	}
 
@@ -137,61 +137,64 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 		return fmt.Errorf("failed to use client (%s): %w", PSQLQuery, err)
 	}
 
-	log.Printf("%q = %v", PSQLQuery, result)
+	log.Printf("(%v) %q = %v", duration, PSQLQuery, result)
 	return nil
 }
 
-func tryQuery(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, error) {
+func tryQuery(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, time.Duration, error) {
 	if sleep > 0 {
 		return tryQueryAsTX(ctx, c, q, sleep)
 	}
 	return _tryQuery(ctx, c, q)
 }
 
-func tryQueryAsTX(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, error) {
+func tryQueryAsTX(ctx context.Context, c *sql.DB, q string, sleep time.Duration) (interface{}, time.Duration, error) {
 	tx, err := c.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer tx.Rollback()
 
 	var version string
 	if err := tx.QueryRowContext(ctx, "SELECT version();").Scan(&version); err != nil {
-		return nil, fmt.Errorf("failed ezpz query: %w", err)
+		return nil, 0, fmt.Errorf("failed ezpz query: %w", err)
 	}
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, 0, ctx.Err()
 	case <-time.After(sleep):
 	}
 
+	start := time.Now()
 	var v interface{}
 	if err := tx.QueryRowContext(ctx, q).Scan(&v); err != nil {
-		return nil, fmt.Errorf("failed to query row context(%q): %w", q, err)
+		return nil, 0, fmt.Errorf("failed to query row context(%q): %w", q, err)
 	} else if v == nil {
-		return nil, fmt.Errorf("no value scanned (%q)", q)
+		return nil, 0, fmt.Errorf("no value scanned (%q)", q)
 	}
+	duration := time.Since(start)
 
-	return v, tx.Commit()
+	return v, duration, tx.Commit()
 }
 
-func _tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, error) {
+func _tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, time.Duration, error) {
 	var version string
 	row := c.QueryRowContext(ctx, "SELECT version();")
 	if err := row.Scan(&version); err != nil {
-		return nil, fmt.Errorf("failed ezpz query: %w", err)
+		return nil, 0, fmt.Errorf("failed ezpz query: %w", err)
 	}
 	if err := row.Err(); err != nil {
-		return nil, fmt.Errorf("failed ezpz query: %w", err)
+		return nil, 0, fmt.Errorf("failed ezpz query: %w", err)
 	}
 
 	var v interface{}
+	start := time.Now()
 	row = c.QueryRowContext(ctx, q)
 	if err := row.Scan(&v); err != nil {
-		return nil, fmt.Errorf("failed to scan row context(%q): %w", q, err)
+		return nil, 0, fmt.Errorf("failed to scan row context(%q): %w", q, err)
 	} else if v == nil {
-		return nil, fmt.Errorf("no value scanned (%q)", q)
+		return nil, 0, fmt.Errorf("no value scanned (%q)", q)
 	}
-	return v, row.Err()
+	return v, time.Since(start), row.Err()
 }
