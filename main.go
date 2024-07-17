@@ -22,7 +22,7 @@ var (
 	PSQLQuery           = envOr("PSQL_QUERY", "SELECT version();")
 	FreshClient         = envOr("FRESH_CLIENT", "true") != "false"
 	StickyClient        = envOr("STICKY_CLIENT", "false") != "false"
-	NoClose             = envOr("NO_CLOSE", "true") == "true"
+	NoClose             = envOr("NO_CLOSE", "false") == "true"
 )
 
 func mustParseDuration(s string) time.Duration {
