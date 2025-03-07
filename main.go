@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -23,7 +24,17 @@ var (
 	FreshClient         = envOr("FRESH_CLIENT", "true") != "false"
 	StickyClient        = envOr("STICKY_CLIENT", "false") != "false"
 	NoClose             = envOr("NO_CLOSE", "false") == "true"
+	N                   = mustParseInt(envOr("N", "0"))
+	Quiet               = envOr("QUIET", "false") == "true"
 )
+
+func mustParseInt(s string) int {
+	d, err := strconv.Atoi(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
 
 func mustParseDuration(s string) time.Duration {
 	d, err := time.ParseDuration(s)
@@ -85,6 +96,22 @@ func main() {
 		}()
 	}
 
+	for i := 0; i < N-1; i++ {
+		i := i
+		c, err := sql.Open("postgres", PSQLConnString)
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if NoClose {
+				return
+			}
+			if err := c.Close(); err != nil {
+				log.Printf("failed to close client[%d]: %v", i, err)
+			}
+		}()
+	}
+
 	for {
 		if FreshClient {
 			if err := func() error {
@@ -133,11 +160,18 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 		return fmt.Errorf("failed to use client again: %w", err)
 	}
 
-	if err != nil {
+	if Quiet {
+		if err == nil {
+			fmt.Printf("\r😃")
+		} else {
+			fmt.Printf("\r🫥")
+		}
+	} else if err != nil {
 		return fmt.Errorf("failed to use client (%s): %w", PSQLQuery, err)
+	} else {
+		log.Printf("(%fms) %q = %v", float64(duration)/float64(time.Millisecond), PSQLQuery, result)
 	}
 
-	log.Printf("(%fms) %q = %v", float64(duration)/float64(time.Millisecond), PSQLQuery, result)
 	return nil
 }
 
