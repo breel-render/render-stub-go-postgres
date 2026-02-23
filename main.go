@@ -26,6 +26,7 @@ var (
 	NoClose             = envOr("NO_CLOSE", "false") == "true"
 	N                   = mustParseInt(envOr("N", "0"))
 	Quiet               = envOr("QUIET", "false") == "true"
+	Port                = mustParseInt(envOr("PORT", "10000"))
 )
 
 func mustParseInt(s string) int {
@@ -72,7 +73,7 @@ func main() {
 	go func() {
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
-			http.ListenAndServe(":8080", http.HandlerFunc(http.NotFound))
+			http.ListenAndServe(fmt.Sprintf(":%d", Port), http.HandlerFunc(http.NotFound))
 		}
 	}()
 
