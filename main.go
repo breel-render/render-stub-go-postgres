@@ -83,6 +83,7 @@ func main() {
 	var stickyClient *sql.DB
 	var err error
 	if StickyClient {
+		log.Printf("dialing...")
 		stickyClient, err = sql.Open("postgres", PSQLConnString)
 		if err != nil {
 			panic(err)
@@ -99,6 +100,7 @@ func main() {
 
 	for i := 0; i < N-1; i++ {
 		i := i
+		log.Printf("dialing...")
 		c, err := sql.Open("postgres", PSQLConnString)
 		if err != nil {
 			panic(err)
@@ -116,6 +118,7 @@ func main() {
 	for {
 		if FreshClient {
 			if err := func() error {
+				log.Printf("dialing...")
 				c, err := sql.Open("postgres", PSQLConnString)
 				if err != nil {
 					return err
