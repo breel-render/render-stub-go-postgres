@@ -83,7 +83,7 @@ func main() {
 	var stickyClient *sql.DB
 	var err error
 	if StickyClient {
-		log.Printf("dialing...")
+		log.Printf("dialing sticky...")
 		stickyClient, err = sql.Open("postgres", PSQLConnString)
 		if err != nil {
 			panic(err)
@@ -100,7 +100,7 @@ func main() {
 
 	for i := 0; i < N-1; i++ {
 		i := i
-		log.Printf("dialing...")
+		log.Printf("dialing async...")
 		c, err := sql.Open("postgres", PSQLConnString)
 		if err != nil {
 			panic(err)
@@ -118,11 +118,20 @@ func main() {
 	for {
 		if FreshClient {
 			if err := func() error {
-				log.Printf("dialing...")
+				ctx, can := context.WithTimeout(ctx, 30*time.Second)
+				defer can()
+
+				log.Printf("dialing fresh...")
 				c, err := sql.Open("postgres", PSQLConnString)
 				if err != nil {
 					return err
 				}
+				log.Printf("pinging fresh...")
+				if err := c.PingContext(ctx); err != nil {
+					return err
+				}
+				log.Printf("trying fresh...")
+
 				defer func() {
 					if NoClose {
 						return
