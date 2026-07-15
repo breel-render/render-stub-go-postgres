@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -54,6 +55,11 @@ func envOr(k, v string) string {
 }
 
 func main() {
+	fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		panic(err)
+	}
+
 	ctx, can := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer can()
 
@@ -70,10 +76,13 @@ func main() {
 		}()
 	}
 
+	var last string
 	go func() {
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
-			http.ListenAndServe(fmt.Sprintf(":%d", Port), http.HandlerFunc(http.NotFound))
+			http.ListenAndServe(fmt.Sprintf(":%d", Port), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintln(w, last)
+			}))
 		}
 	}()
 
@@ -141,14 +150,14 @@ func main() {
 					}
 				}()
 
-				return tryClient(ctx, c)
+				return tryClient(ctx, c, &last)
 			}(); err != nil {
 				log.Printf("failed to use a new client: %v", err)
 			}
 		}
 
 		if stickyClient != nil {
-			if err := tryClient(ctx, stickyClient); err != nil {
+			if err := tryClient(ctx, stickyClient, &last); err != nil {
 				log.Printf("failed to use a sticky client: %v", err)
 			}
 		}
@@ -162,7 +171,7 @@ func main() {
 	}
 }
 
-func tryClient(ctx context.Context, c *sql.DB) error {
+func tryClient(ctx context.Context, c *sql.DB, last *string) error {
 	if _, _, err := tryQuery(ctx, c, "SELECT version();", 0); err != nil {
 		return fmt.Errorf("failed to use client at all: %w", err)
 	}
@@ -180,9 +189,11 @@ func tryClient(ctx context.Context, c *sql.DB) error {
 			fmt.Printf("\r🫥")
 		}
 	} else if err != nil {
-		return fmt.Errorf("failed to use client (%s): %w", PSQLQuery, err)
+		*last = fmt.Sprintf("failed to use client (%s): %v", PSQLQuery, err)
+		return fmt.Errorf("%s", *last)
 	} else {
-		log.Printf("(%fms) %q = %v", float64(duration)/float64(time.Millisecond), PSQLQuery, result)
+		*last = fmt.Sprintf("(%fms) %q = %v", float64(duration)/float64(time.Millisecond), PSQLQuery, result)
+		log.Printf("%s", *last)
 	}
 
 	return nil
