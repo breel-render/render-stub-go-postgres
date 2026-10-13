@@ -27,6 +27,7 @@ var (
 	NoClose             = envOr("NO_CLOSE", "false") == "true"
 	N                   = mustParseInt(envOr("N", "0"))
 	NQuery              = envOr("N_QUERY", "false") == "true"
+	NTransaction        = envOr("N_TRANSACTION", "false") == "true"
 	Quiet               = envOr("QUIET", "false") == "true"
 	Port                = mustParseInt(envOr("PORT", "10000"))
 )
@@ -131,6 +132,18 @@ func main() {
 			c, err := sql.Open("postgres", PSQLConnString)
 			if err != nil {
 				panic(err)
+			}
+
+			if NTransaction {
+				go func() {
+					tx, err := c.BeginTx(ctx, &sql.TxOptions{})
+					if err != nil {
+						panic(err)
+					}
+					defer tx.Rollback()
+
+					<-ctx.Done()
+				}()
 			}
 
 			defer func() {
