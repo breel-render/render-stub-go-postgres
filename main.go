@@ -76,12 +76,12 @@ func main() {
 		}()
 	}
 
-	var last string
+	var last, last2 string
 	go func() {
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
 			http.ListenAndServe(fmt.Sprintf(":%d", Port), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintln(w, last)
+				fmt.Fprintln(w, last, last2)
 			}))
 		}
 	}()
@@ -128,10 +128,6 @@ func main() {
 		if FreshClient {
 			if err := func() error {
 				start := time.Now()
-				defer func() {
-					duration := time.Since(start)
-					log.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
-				}()
 
 				ctx, can := context.WithTimeout(ctx, 30*time.Second)
 				defer can()
@@ -156,7 +152,13 @@ func main() {
 					}
 				}()
 
-				return tryClient(ctx, c, &last)
+				if err := tryClient(ctx, c, &last); err != nil {
+					return err
+				}
+				duration := time.Since(start)
+				last2 = fmt.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
+
+				return nil
 			}(); err != nil {
 				log.Printf("failed to use a new client: %v", err)
 			}
