@@ -127,6 +127,12 @@ func main() {
 	for {
 		if FreshClient {
 			if err := func() error {
+				start := time.Now()
+				defer func() {
+					duration := time.Since(start)
+					log.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
+				}()
+
 				ctx, can := context.WithTimeout(ctx, 30*time.Second)
 				defer can()
 
