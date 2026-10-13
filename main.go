@@ -130,7 +130,7 @@ func main() {
 				start := time.Now()
 				defer func() {
 					duration := time.Since(start)
-					last = fmt.Sprintf("%s ((%fms) fresh dial + query)", last, float64(duration)/float64(time.Millisecond))
+					log.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
 				}()
 
 				ctx, can := context.WithTimeout(ctx, 30*time.Second)
