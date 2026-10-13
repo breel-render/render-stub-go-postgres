@@ -163,6 +163,11 @@ func main() {
 				return nil
 			}(); err != nil {
 				log.Printf("failed to use a new client: %v", err)
+	for {
+		if FreshClient {
+			d := GoN(0)
+			if !Quiet && d > 0 {
+				log.Printf("(%fms) fresh dial + query", float64(d)/float64(time.Millisecond))
 			}
 		}
 
@@ -177,7 +182,6 @@ func main() {
 			return
 		case <-ticker.C:
 		}
-
 	}
 }
 
@@ -265,4 +269,45 @@ func _tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, time.Dura
 		return nil, 0, fmt.Errorf("no value scanned (%q)", q)
 	}
 	return v, time.Since(start), row.Err()
+}
+
+func GoN(i int) time.Duration {
+	var d time.Duration
+	if err := func() error {
+		start := time.Now()
+
+		ctx, can := context.WithTimeout(ctx, 30*time.Second)
+		defer can()
+
+		log.Printf("dialing fresh...")
+		c, err := sql.Open("postgres", PSQLConnString)
+		if err != nil {
+			return err
+		}
+		log.Printf("pinging fresh...")
+		if err := c.PingContext(ctx); err != nil {
+			return err
+		}
+		log.Printf("trying fresh...")
+
+		defer func() {
+			if NoClose {
+				return
+			}
+			if err := c.Close(); err != nil {
+				log.Printf("failed to close fresh client: %v", err)
+			}
+		}()
+
+		if err := tryClient(ctx, c, &last); err != nil {
+			return err
+		}
+
+		d = time.Since(start)
+
+		return nil
+	}(); err != nil {
+		log.Printf("failed to use a new client: %v", err)
+	}
+	return d
 }
