@@ -156,7 +156,7 @@ func main() {
 					return err
 				}
 				duration := time.Since(start)
-				last2 = fmt.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
+				last2 = fmt.Sprintf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
 
 				return nil
 			}(); err != nil {
