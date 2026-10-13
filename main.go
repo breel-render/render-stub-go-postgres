@@ -26,6 +26,7 @@ var (
 	StickyClient        = envOr("STICKY_CLIENT", "false") != "false"
 	NoClose             = envOr("NO_CLOSE", "false") == "true"
 	N                   = mustParseInt(envOr("N", "0"))
+	NQuery              = envOr("N_QUERY", "false") == "true"
 	Quiet               = envOr("QUIET", "false") == "true"
 	Port                = mustParseInt(envOr("PORT", "10000"))
 )
@@ -108,61 +109,39 @@ func main() {
 	}
 
 	for i := 0; i < N-1; i++ {
-		i := i
-		log.Printf("dialing async...")
-		c, err := sql.Open("postgres", PSQLConnString)
-		if err != nil {
-			panic(err)
+		if NQuery {
+			go func(i int) {
+				ticker := time.NewTicker(QueryInterval)
+				defer ticker.Stop()
+
+				for {
+					GoN(i)
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				}
+			}(i)
+		} else {
+			i := i
+			log.Printf("dialing async...")
+			c, err := sql.Open("postgres", PSQLConnString)
+			if err != nil {
+				panic(err)
+			}
+
+			defer func() {
+				if NoClose {
+					return
+				}
+				if err := c.Close(); err != nil {
+					log.Printf("failed to close client[%d]: %v", i, err)
+				}
+			}()
 		}
-		defer func() {
-			if NoClose {
-				return
-			}
-			if err := c.Close(); err != nil {
-				log.Printf("failed to close client[%d]: %v", i, err)
-			}
-		}()
 	}
 
-	for {
-		if FreshClient {
-			if err := func() error {
-				start := time.Now()
-
-				ctx, can := context.WithTimeout(ctx, 30*time.Second)
-				defer can()
-
-				log.Printf("dialing fresh...")
-				c, err := sql.Open("postgres", PSQLConnString)
-				if err != nil {
-					return err
-				}
-				log.Printf("pinging fresh...")
-				if err := c.PingContext(ctx); err != nil {
-					return err
-				}
-				log.Printf("trying fresh...")
-
-				defer func() {
-					if NoClose {
-						return
-					}
-					if err := c.Close(); err != nil {
-						log.Printf("failed to close fresh client: %v", err)
-					}
-				}()
-
-				if err := tryClient(ctx, c, &last); err != nil {
-					return err
-				}
-				duration := time.Since(start)
-				if !Quiet {
-					log.Printf("(%fms) fresh dial + query", float64(duration)/float64(time.Millisecond))
-				}
-
-				return nil
-			}(); err != nil {
-				log.Printf("failed to use a new client: %v", err)
 	for {
 		if FreshClient {
 			d := GoN(0)
