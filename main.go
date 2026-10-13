@@ -114,8 +114,10 @@ func main() {
 				ticker := time.NewTicker(QueryInterval)
 				defer ticker.Stop()
 
+				last := ""
+
 				for {
-					GoN(i)
+					GoN(ctx, i, &last)
 					select {
 					case <-ctx.Done():
 						return
@@ -144,7 +146,7 @@ func main() {
 
 	for {
 		if FreshClient {
-			d := GoN(0)
+			d := GoN(ctx, 0, &last)
 			if !Quiet && d > 0 {
 				log.Printf("(%fms) fresh dial + query", float64(d)/float64(time.Millisecond))
 			}
@@ -250,7 +252,7 @@ func _tryQuery(ctx context.Context, c *sql.DB, q string) (interface{}, time.Dura
 	return v, time.Since(start), row.Err()
 }
 
-func GoN(i int) time.Duration {
+func GoN(ctx context.Context, i int, last *string) time.Duration {
 	var d time.Duration
 	if err := func() error {
 		start := time.Now()
@@ -278,7 +280,7 @@ func GoN(i int) time.Duration {
 			}
 		}()
 
-		if err := tryClient(ctx, c, &last); err != nil {
+		if err := tryClient(ctx, c, last); err != nil {
 			return err
 		}
 
